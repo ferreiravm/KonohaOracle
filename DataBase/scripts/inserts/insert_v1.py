@@ -952,4 +952,4 @@ VALUES
 
 conn.commit()
 
-print("✅ INSERT REALIZADO")
+print("INSERT REALIZADO")

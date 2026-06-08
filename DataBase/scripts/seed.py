@@ -270,4 +270,4 @@ INSERT INTO PersonagensAtributosDatabook VALUES
 
 conn.commit()
 
-print("✅ SEED COMPLETA EXECUTADA COM SUCESSO!")
+print("SEED COMPLETA EXECUTADA COM SUCESSO!")
