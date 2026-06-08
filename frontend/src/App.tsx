@@ -5,7 +5,6 @@ type ChatMessage = {
   id: number;
   role: "user" | "oracle";
   content: string;
-  sql?: string;
 };
 
 type ChatResponse = {
@@ -64,7 +63,6 @@ function App() {
           id: Date.now() + 1,
           role: "oracle",
           content: payload.answer,
-          sql: payload.sql,
         },
       ]);
     } catch (requestError) {
@@ -102,7 +100,6 @@ function App() {
             messages.map((message) => (
               <article className={`message ${message.role}`} key={message.id}>
                 <p>{message.content}</p>
-                {message.sql ? <code>{message.sql}</code> : null}
               </article>
             ))
           )}
