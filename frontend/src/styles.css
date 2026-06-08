@@ -28,7 +28,7 @@ input {
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgba(242, 245, 247, 0.94), rgba(242, 245, 247, 0.98)),
-    url("../../assets/images/naruto_logo.png") center 12% / min(760px, 80vw) no-repeat;
+    url("/naruto_logo.png") center 12% / min(760px, 80vw) no-repeat;
 }
 
 .sidebar {

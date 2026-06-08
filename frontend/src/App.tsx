@@ -1,8 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { LoaderCircle, Send } from "lucide-react";
 
-import logoUrl from "../../assets/images/naruto_logo.png";
-
 type ChatMessage = {
   id: number;
   role: "user" | "oracle";
@@ -79,7 +77,7 @@ function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <img className="brand-logo" src={logoUrl} alt="Konoha Oracle" />
+        <img className="brand-logo" src="/naruto_logo.png" alt="Konoha Oracle" />
         <div className="status-panel">
           <span className="status-dot" />
           <span>API: {apiUrl}</span>
