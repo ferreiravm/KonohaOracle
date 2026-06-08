@@ -38,6 +38,19 @@ def get_connection():
     )
 
 
+def is_openai_enabled() -> bool:
+    enabled = os.getenv("OPENAI_ENABLED", "false").lower()
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_API_KEY")
+    invalid_placeholders = {
+        "",
+        "sk-proj-your-key",
+        "sua_chave_openai",
+        "SUA_CHAVE_REAL_DA_OPENAI",
+    }
+
+    return enabled in {"1", "true", "yes"} and api_key not in invalid_placeholders
+
+
 def load_protocol() -> dict:
     with PROTOCOL_PATH.open("r", encoding="utf-8") as file:
         return json.load(file)
@@ -92,6 +105,9 @@ def main() -> None:
     protocol = load_protocol()
     colunas = load_database_structure()
     pergunta_usuario = input("Faca sua pergunta: ")
+
+    if not is_openai_enabled():
+        raise RuntimeError("OpenAI desabilitada. Configure OPENAI_ENABLED=true para ativar.")
 
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_API_KEY")
     if not api_key:

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.app.config import get_cors_origins
-from backend.app.oracle import KonohaOracleService
+from backend.app.oracle import build_oracle_service
 
 
 class ChatRequest(BaseModel):
@@ -35,7 +35,7 @@ def health() -> dict:
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest) -> ChatResponse:
     try:
-        result = KonohaOracleService().ask(payload.question)
+        result = build_oracle_service().ask(payload.question)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:

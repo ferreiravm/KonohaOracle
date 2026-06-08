@@ -22,7 +22,23 @@ def get_optional_env(name: str, default: str = "") -> str:
 
 
 def get_openai_api_key() -> str:
+    if not is_openai_enabled():
+        raise RuntimeError("OpenAI desabilitada. Configure OPENAI_ENABLED=true para ativar.")
+
     return get_optional_env("OPENAI_API_KEY") or get_env("OPEN_API_KEY")
+
+
+def is_openai_enabled() -> bool:
+    enabled = get_optional_env("OPENAI_ENABLED", "false").lower()
+    api_key = get_optional_env("OPENAI_API_KEY") or get_optional_env("OPEN_API_KEY")
+    invalid_placeholders = {
+        "",
+        "sk-proj-your-key",
+        "sua_chave_openai",
+        "SUA_CHAVE_REAL_DA_OPENAI",
+    }
+
+    return enabled in {"1", "true", "yes"} and api_key not in invalid_placeholders
 
 
 def get_cors_origins() -> list[str]:

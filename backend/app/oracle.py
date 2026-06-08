@@ -130,3 +130,22 @@ Responda de forma clara e organizada.
         )
 
         return response.choices[0].message.content or ""
+
+
+class KonohaOracleOfflineService:
+    def ask(self, question: str) -> dict:
+        return {
+            "answer": (
+                "O Konoha Oracle esta em modo offline porque OPENAI_API_KEY nao foi configurada. "
+                "A API e o banco podem ser testados sem consumir creditos da OpenAI."
+            ),
+            "sql": "",
+            "rows": [],
+        }
+
+
+def build_oracle_service():
+    try:
+        return KonohaOracleService()
+    except RuntimeError:
+        return KonohaOracleOfflineService()

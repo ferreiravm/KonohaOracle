@@ -15,6 +15,9 @@ env/
 .env.*
 !.env.example
 
+# Railway local project link
+.railway/
+
 # Frontend
 node_modules/
 dist/
