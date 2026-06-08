@@ -1,9 +1,14 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.app.config import get_cors_origins
 from backend.app.oracle import build_oracle_service
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -41,6 +46,7 @@ def chat(payload: ChatRequest) -> ChatResponse:
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Erro inesperado ao processar pergunta.")
         raise HTTPException(status_code=500, detail="Erro ao processar pergunta.") from error
 
     return ChatResponse(**result)
