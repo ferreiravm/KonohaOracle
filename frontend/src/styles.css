@@ -536,6 +536,16 @@ h1 {
   color: #991b1b;
 }
 
+.status-badge.erro {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.status-badge.aplicado {
+  background: #e0f2fe;
+  color: #075985;
+}
+
 .curation-detail {
   padding: 16px;
   border-top: 1px solid #d9e2ec;

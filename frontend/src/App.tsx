@@ -30,6 +30,7 @@ type CurationItem = {
   proposta: Record<string, unknown>;
   fontes: Record<string, unknown>[];
   observacao?: string | null;
+  erroaplicacao?: string | null;
   criadoem: string;
 };
 
@@ -595,11 +596,18 @@ function App() {
                         {selectedCuration.status} em {new Date(selectedCuration.criadoem).toLocaleString("pt-BR")}
                       </p>
                     </div>
-                    <button disabled={isCurating || selectedCuration.status !== "Aprovado"} onClick={loadApplyPreview} type="button">
+                    <button disabled={isCurating || !canPreviewApply(selectedCuration)} onClick={loadApplyPreview} type="button">
                       <Database size={16} />
-                      <span>Preview aplicar</span>
+                      <span>{selectedCuration.status === "Erro" ? "Corrigir aplicacao" : "Preview aplicar"}</span>
                     </button>
                   </div>
+
+                  {selectedCuration.erroaplicacao ? (
+                    <div className="preview-block warning">
+                      <strong>Erro anterior</strong>
+                      <p>{selectedCuration.erroaplicacao}</p>
+                    </div>
+                  ) : null}
 
                   {applyPreview ? (
                     <div className="apply-preview">
@@ -747,6 +755,10 @@ function buildAdminHeaders(adminToken: string) {
   }
 
   return headers;
+}
+
+function canPreviewApply(curation: CurationItem) {
+  return curation.entidade === "personagem" && ["Aprovado", "Erro"].includes(curation.status);
 }
 
 type PersonagemEditorProps = {
