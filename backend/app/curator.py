@@ -1,5 +1,7 @@
 import json
+import re
 from typing import Literal
+from urllib.parse import quote
 from urllib.parse import urlencode
 
 import httpx
@@ -10,6 +12,9 @@ from backend.app.database import load_database_structure, save_curation_decision
 
 
 EntityType = Literal["personagem", "jutsu", "arco", "vila", "cla", "grupo", "ferramenta"]
+WIKI_HEADERS = {
+    "User-Agent": "KonohaOracle/1.0 (curation research; https://github.com/ferreiravm/KonohaOracle)",
+}
 
 
 def _wikipedia_search_url(query: str) -> str:
@@ -26,9 +31,18 @@ def _wikipedia_search_url(query: str) -> str:
 
 
 def search_public_context(query: str) -> list[dict]:
-    with httpx.Client(timeout=12.0, follow_redirects=True) as client:
+    with httpx.Client(timeout=12.0, follow_redirects=True, headers=WIKI_HEADERS) as client:
         search_response = client.get(_wikipedia_search_url(query))
-        search_response.raise_for_status()
+        if search_response.status_code >= 400:
+            return [
+                {
+                    "title": "Busca publica indisponivel",
+                    "description": f"Wikipedia retornou HTTP {search_response.status_code}.",
+                    "url": "",
+                    "summary": "",
+                }
+            ]
+
         payload = search_response.json()
 
         titles = payload[1] if len(payload) > 1 else []
@@ -37,7 +51,7 @@ def search_public_context(query: str) -> list[dict]:
 
         results = []
         for index, title in enumerate(titles[:3]):
-            summary_url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{title}"
+            summary_url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{quote(title, safe='')}"
             summary_response = client.get(summary_url)
             summary = ""
             if summary_response.status_code == 200:
@@ -112,7 +126,7 @@ Gere um JSON neste formato:
         )
 
         raw_content = response.choices[0].message.content or "{}"
-        proposal = json.loads(raw_content)
+        proposal = parse_json_response(raw_content)
 
         return {
             "entity": entity,
@@ -138,3 +152,15 @@ def save_decision(
         sources_json=json.dumps(sources, ensure_ascii=False),
         note=note,
     )
+
+
+def parse_json_response(raw_content: str) -> dict:
+    cleaned = raw_content.strip().replace("```json", "").replace("```", "").strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        raise
