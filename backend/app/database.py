@@ -77,6 +77,36 @@ def ensure_curation_table() -> None:
                 );
                 """
             )
+            cursor.execute(
+                """
+                ALTER TABLE CuradoriaSugestoes
+                ADD COLUMN IF NOT EXISTS AplicadoEm TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS ErroAplicacao TEXT;
+                """
+            )
+            cursor.execute(
+                """
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.constraint_column_usage
+                        WHERE table_name = 'curadoriasugestoes'
+                        AND column_name = 'status'
+                    ) THEN
+                        ALTER TABLE CuradoriaSugestoes
+                        DROP CONSTRAINT IF EXISTS curadoriasugestoes_status_check;
+                    END IF;
+                END $$;
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE CuradoriaSugestoes
+                ADD CONSTRAINT curadoriasugestoes_status_check
+                CHECK (Status IN ('Aprovado', 'Rejeitado', 'Aplicado', 'Erro'));
+                """
+            )
         conn.commit()
 
 
@@ -125,7 +155,9 @@ def list_curation_decisions(status: str | None = None, limit: int = 20) -> list[
                         Proposta,
                         Fontes,
                         Observacao,
-                        CriadoEm
+                        CriadoEm,
+                        AplicadoEm,
+                        ErroAplicacao
                     FROM CuradoriaSugestoes
                     WHERE Status = %s
                     ORDER BY IdCuradoria DESC
@@ -144,7 +176,9 @@ def list_curation_decisions(status: str | None = None, limit: int = 20) -> list[
                         Proposta,
                         Fontes,
                         Observacao,
-                        CriadoEm
+                        CriadoEm,
+                        AplicadoEm,
+                        ErroAplicacao
                     FROM CuradoriaSugestoes
                     ORDER BY IdCuradoria DESC
                     LIMIT %s;
@@ -170,7 +204,9 @@ def get_curation_decision(curation_id: int) -> dict | None:
                     Proposta,
                     Fontes,
                     Observacao,
-                    CriadoEm
+                    CriadoEm,
+                    AplicadoEm,
+                    ErroAplicacao
                 FROM CuradoriaSugestoes
                 WHERE IdCuradoria = %s;
                 """,
@@ -179,6 +215,79 @@ def get_curation_decision(curation_id: int) -> dict | None:
             row = cursor.fetchone()
 
     return dict(row) if row else None
+
+
+def insert_personagem(data: dict) -> int:
+    columns = list(data.keys())
+    values = [data[column] for column in columns]
+    placeholders = ", ".join(["%s"] * len(columns))
+    column_list = ", ".join(columns)
+
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO Personagens ({column_list})
+                VALUES ({placeholders})
+                RETURNING IdPersonagem;
+                """,
+                values,
+            )
+            personagem_id = cursor.fetchone()[0]
+        conn.commit()
+
+    return personagem_id
+
+
+def personagem_exists(nome: str, sobrenome: str | None = None) -> bool:
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM Personagens
+                WHERE LOWER(Nome) = LOWER(%s)
+                AND COALESCE(LOWER(Sobrenome), '') = COALESCE(LOWER(%s), '')
+                LIMIT 1;
+                """,
+                (nome, sobrenome),
+            )
+            return cursor.fetchone() is not None
+
+
+def mark_curation_applied(curation_id: int) -> None:
+    ensure_curation_table()
+
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE CuradoriaSugestoes
+                SET Status = 'Aplicado',
+                    AplicadoEm = NOW(),
+                    ErroAplicacao = NULL
+                WHERE IdCuradoria = %s;
+                """,
+                (curation_id,),
+            )
+        conn.commit()
+
+
+def mark_curation_error(curation_id: int, error: str) -> None:
+    ensure_curation_table()
+
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE CuradoriaSugestoes
+                SET Status = 'Erro',
+                    ErroAplicacao = %s
+                WHERE IdCuradoria = %s;
+                """,
+                (error[:1000], curation_id),
+            )
+        conn.commit()
 
 
 def find_lookup_id(table: str, id_column: str, name_column: str, name: str) -> int | None:

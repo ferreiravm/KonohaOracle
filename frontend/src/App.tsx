@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { Dispatch, FormEvent, SetStateAction, useMemo, useState } from "react";
 import { Check, Database, LoaderCircle, RefreshCw, Search, Send, X } from "lucide-react";
 
 type ChatMessage = {
@@ -80,7 +80,7 @@ function App() {
   const [applyPreview, setApplyPreview] = useState<ApplyPreview | null>(null);
   const [referenceOptions, setReferenceOptions] = useState<ReferenceOptions | null>(null);
   const [applyOverrides, setApplyOverrides] = useState<Record<string, string>>({});
-  const [curationFilter, setCurationFilter] = useState<"todos" | "Aprovado" | "Rejeitado">("todos");
+  const [curationFilter, setCurationFilter] = useState<"todos" | "Aprovado" | "Rejeitado" | "Aplicado" | "Erro">("todos");
   const [curationStatus, setCurationStatus] = useState("");
   const [isCurating, setIsCurating] = useState(false);
 
@@ -244,6 +244,36 @@ function App() {
 
       setApplyPreview((await response.json()) as ApplyPreview);
       await loadReferenceOptions();
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    } finally {
+      setIsCurating(false);
+    }
+  }
+
+  async function applyToDatabase() {
+    if (!selectedCuration || !applyPreview || applyPreview.status !== "ready") {
+      return;
+    }
+
+    setCurationStatus("");
+    setIsCurating(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/admin/curation/${selectedCuration.idcuradoria}/apply`, {
+        method: "POST",
+        headers: buildAdminHeaders(adminToken),
+        body: JSON.stringify({ overrides: normalizeOverrides(applyOverrides) }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel aplicar a curadoria.");
+      }
+
+      const payload = (await response.json()) as { idpersonagem: number; status: string };
+      setCurationStatus(`Curadoria aplicada. Personagem criado com ID ${payload.idpersonagem}.`);
+      await loadCurationItems();
     } catch (requestError) {
       setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
     } finally {
@@ -432,6 +462,8 @@ function App() {
                     <option value="todos">Todos</option>
                     <option value="Aprovado">Aprovados</option>
                     <option value="Rejeitado">Rejeitados</option>
+                    <option value="Aplicado">Aplicados</option>
+                    <option value="Erro">Com erro</option>
                   </select>
                   <button onClick={loadCurationItems} type="button">
                     <RefreshCw size={16} />
@@ -492,66 +524,30 @@ function App() {
                         </div>
                       ) : null}
 
-                      {applyPreview.critical_missing.length > 0 ? (
-                        <div className="completion-form">
-                          <h4>Completar campos</h4>
-                          {applyPreview.critical_missing.includes("idtipopersonagem") ? (
-                            <label>
-                              Tipo de personagem
-                              <select
-                                value={applyOverrides.idtipopersonagem ?? ""}
-                                onChange={(event) => setApplyOverrides((current) => ({ ...current, idtipopersonagem: event.target.value }))}
-                              >
-                                <option value="">Selecione</option>
-                                {referenceOptions?.tipos_personagem.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
-
-                          {applyPreview.critical_missing.includes("idarcoaparicao") ? (
-                            <label>
-                              Arco de aparicao
-                              <select
-                                value={applyOverrides.idarcoaparicao ?? ""}
-                                onChange={(event) => setApplyOverrides((current) => ({ ...current, idarcoaparicao: event.target.value }))}
-                              >
-                                <option value="">Selecione</option>
-                                {referenceOptions?.arcos.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
-
-                          {applyPreview.critical_missing.includes("estado") ? (
-                            <label>
-                              Estado
-                              <select
-                                value={applyOverrides.estado ?? ""}
-                                onChange={(event) => setApplyOverrides((current) => ({ ...current, estado: event.target.value }))}
-                              >
-                                <option value="">Selecione</option>
-                                {referenceOptions?.estados.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
-
+                      <div className="completion-form">
+                        <h4>Revisar personagem</h4>
+                        <PersonagemEditor
+                          applyOverrides={applyOverrides}
+                          preview={applyPreview}
+                          referenceOptions={referenceOptions}
+                          setApplyOverrides={setApplyOverrides}
+                        />
+                        <div className="completion-actions">
                           <button disabled={isCurating} onClick={loadApplyPreview} type="button">
                             <Database size={16} />
                             <span>Atualizar preview</span>
                           </button>
+                          <button
+                            className="apply-final"
+                            disabled={isCurating || applyPreview.status !== "ready"}
+                            onClick={applyToDatabase}
+                            type="button"
+                          >
+                            <Check size={16} />
+                            <span>Aplicar ao banco</span>
+                          </button>
                         </div>
-                      ) : null}
+                      </div>
 
                       {applyPreview.warnings.length > 0 ? (
                         <div className="preview-block">
@@ -589,6 +585,101 @@ function buildAdminHeaders(adminToken: string) {
   }
 
   return headers;
+}
+
+type PersonagemEditorProps = {
+  applyOverrides: Record<string, string>;
+  preview: ApplyPreview;
+  referenceOptions: ReferenceOptions | null;
+  setApplyOverrides: Dispatch<SetStateAction<Record<string, string>>>;
+};
+
+const PERSONAGEM_FIELDS = [
+  { key: "nome", label: "Nome", type: "text" },
+  { key: "sobrenome", label: "Sobrenome", type: "text" },
+  { key: "idtipopersonagem", label: "Tipo de personagem", type: "select", optionKey: "tipos_personagem" },
+  { key: "idcla", label: "Cla", type: "select", optionKey: "clas" },
+  { key: "idarcoaparicao", label: "Arco de aparicao", type: "select", optionKey: "arcos" },
+  { key: "idarcomorte", label: "Arco de morte", type: "select", optionKey: "arcos" },
+  { key: "idocupacaoclassico", label: "Ocupacao classico", type: "select", optionKey: "ocupacoes" },
+  { key: "idocupacaoshippuden", label: "Ocupacao Shippuden", type: "select", optionKey: "ocupacoes" },
+  { key: "idvila", label: "Vila", type: "select", optionKey: "vilas" },
+  { key: "sexo", label: "Sexo", type: "select", optionKey: "sexos" },
+  { key: "estado", label: "Estado", type: "select", optionKey: "estados" },
+  { key: "idadeclasico", label: "Idade classico", type: "number" },
+  { key: "idadeshippuden", label: "Idade Shippuden", type: "number" },
+  { key: "datanascimento", label: "Data de nascimento", type: "date" },
+  { key: "alturaclassico", label: "Altura classico", type: "number" },
+  { key: "alturashippuden", label: "Altura Shippuden", type: "number" },
+  { key: "corcabelo", label: "Cor do cabelo", type: "text" },
+  { key: "corolhos", label: "Cor dos olhos", type: "text" },
+  { key: "corpele", label: "Cor da pele", type: "text" },
+  { key: "missoescompletas", label: "Missoes completas", type: "number" },
+  { key: "descricao", label: "Descricao", type: "textarea" },
+  { key: "historiapersonagem", label: "Historia", type: "textarea" },
+  { key: "descricaoroupaclassico", label: "Roupa classico", type: "textarea" },
+  { key: "descricaoroupashippuden", label: "Roupa Shippuden", type: "textarea" },
+] as const;
+
+function PersonagemEditor({ applyOverrides, preview, referenceOptions, setApplyOverrides }: PersonagemEditorProps) {
+  function getFieldValue(key: string) {
+    if (applyOverrides[key] !== undefined) {
+      return applyOverrides[key];
+    }
+
+    const value = preview.resolved_fields[key];
+    return value === null || value === undefined ? "" : String(value);
+  }
+
+  function updateField(key: string, value: string) {
+    setApplyOverrides((current) => ({ ...current, [key]: value }));
+  }
+
+  return (
+    <div className="personagem-editor">
+      {PERSONAGEM_FIELDS.map((field) => {
+        const isCritical = preview.critical_missing.includes(field.key);
+
+        if (field.type === "select") {
+          const options = referenceOptions?.[field.optionKey as keyof ReferenceOptions] ?? [];
+          return (
+            <label className={isCritical ? "critical-field" : ""} key={field.key}>
+              {field.label}
+              <select value={getFieldValue(field.key)} onChange={(event) => updateField(field.key, event.target.value)}>
+                <option value="">Nao informado</option>
+                {options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        }
+
+        if (field.type === "textarea") {
+          return (
+            <label className={isCritical ? "critical-field" : ""} key={field.key}>
+              {field.label}
+              <textarea rows={4} value={getFieldValue(field.key)} onChange={(event) => updateField(field.key, event.target.value)} />
+            </label>
+          );
+        }
+
+        return (
+          <label className={isCritical ? "critical-field" : ""} key={field.key}>
+            {field.label}
+            <input
+              step={field.key.startsWith("altura") ? "0.01" : undefined}
+              type={field.type}
+              value={getFieldValue(field.key)}
+              onChange={(event) => updateField(field.key, event.target.value)}
+            />
+          </label>
+        );
+      })}
+    </div>
+  );
 }
 
 function normalizeOverrides(overrides: Record<string, string>) {

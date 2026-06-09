@@ -603,6 +603,50 @@ h1 {
   cursor: pointer;
 }
 
+.completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.completion-actions .apply-final {
+  background: #b42318;
+}
+
+.completion-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.personagem-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.personagem-editor label {
+  min-width: 0;
+}
+
+.personagem-editor .critical-field {
+  color: #991b1b;
+}
+
+.personagem-editor .critical-field select,
+.personagem-editor .critical-field input,
+.personagem-editor .critical-field textarea {
+  border-color: #ef4444;
+}
+
+.personagem-editor textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.personagem-editor label:has(textarea) {
+  grid-column: 1 / -1;
+}
+
 .muted-text {
   margin: 0;
   padding: 16px;
@@ -678,6 +722,10 @@ h1 {
 
   .detail-header {
     flex-direction: column;
+  }
+
+  .personagem-editor {
+    grid-template-columns: 1fr;
   }
 
   h1 {

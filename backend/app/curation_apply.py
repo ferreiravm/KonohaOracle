@@ -1,4 +1,11 @@
-from backend.app.database import find_lookup_id, get_curation_decision
+from backend.app.database import (
+    find_lookup_id,
+    get_curation_decision,
+    insert_personagem,
+    mark_curation_applied,
+    mark_curation_error,
+    personagem_exists,
+)
 
 
 PERSONAGEM_INSERT_FIELDS = [
@@ -86,22 +93,59 @@ def build_apply_preview(curation_id: int, overrides: dict | None = None) -> dict
 
 
 def apply_overrides(resolved_fields: dict, overrides: dict) -> None:
-    allowed_overrides = {
-        "idtipopersonagem",
-        "idarcoaparicao",
-        "estado",
-        "sexo",
-        "idcla",
-        "idvila",
-        "idocupacaoclassico",
-        "idocupacaoshippuden",
-        "idarcomorte",
-    }
-
     for key, value in overrides.items():
         normalized_key = str(key).lower()
-        if normalized_key in allowed_overrides and value not in ("", None):
-            resolved_fields[normalized_key] = value
+        if normalized_key in PERSONAGEM_INSERT_FIELDS and value not in ("", None):
+            resolved_fields[normalized_key] = normalize_override_value(normalized_key, value)
+
+
+def normalize_override_value(field: str, value):
+    integer_fields = {
+        "idtipopersonagem",
+        "idcla",
+        "idarcoaparicao",
+        "idarcomorte",
+        "idocupacaoclassico",
+        "idocupacaoshippuden",
+        "idvila",
+        "idadeclasico",
+        "idadeshippuden",
+        "missoescompletas",
+    }
+    decimal_fields = {"alturaclassico", "alturashippuden"}
+
+    if field in integer_fields:
+        return int(value)
+    if field in decimal_fields:
+        return float(value)
+
+    return value
+
+
+def apply_curation_to_database(curation_id: int, overrides: dict | None = None) -> dict:
+    try:
+        preview = build_apply_preview(curation_id, overrides=overrides)
+
+        if preview["status"] != "ready" or not preview["operations"]:
+            raise ValueError("Preview ainda possui campos criticos pendentes.")
+
+        operation = preview["operations"][0]
+        data = operation["data"]
+
+        if personagem_exists(data["nome"], data.get("sobrenome")):
+            raise ValueError("Personagem ja existe no banco com o mesmo nome e sobrenome.")
+
+        personagem_id = insert_personagem(data)
+        mark_curation_applied(curation_id)
+
+        return {
+            "status": "Aplicado",
+            "idpersonagem": personagem_id,
+            "operation": operation,
+        }
+    except Exception as error:
+        mark_curation_error(curation_id, str(error))
+        raise
 
 
 def normalize_personagem(personagem: dict) -> dict:

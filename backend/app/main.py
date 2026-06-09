@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.app.config import get_admin_token, get_cors_origins
-from backend.app.curation_apply import build_apply_preview
+from backend.app.curation_apply import apply_curation_to_database, build_apply_preview
 from backend.app.curator import CurationService, EntityType, save_decision
 from backend.app.database import list_curation_decisions, load_reference_options
 from backend.app.oracle import build_oracle_service
@@ -62,6 +62,8 @@ class CurationItem(BaseModel):
     fontes: list[dict]
     observacao: str | None = None
     criadoem: datetime
+    aplicadoem: datetime | None = None
+    erroaplicacao: str | None = None
 
 
 class CurationApplyPreviewResponse(BaseModel):
@@ -78,6 +80,12 @@ class CurationApplyPreviewResponse(BaseModel):
 
 class CurationApplyPreviewRequest(BaseModel):
     overrides: dict = Field(default_factory=dict)
+
+
+class CurationApplyResponse(BaseModel):
+    status: str
+    idpersonagem: int
+    operation: dict
 
 
 app = FastAPI(title="Konoha Oracle API")
@@ -164,7 +172,7 @@ def decide_curation(
 
 @app.get("/admin/curation/items", response_model=list[CurationItem])
 def list_curation_items(
-    status: Literal["Aprovado", "Rejeitado"] | None = Query(default=None),
+    status: Literal["Aprovado", "Rejeitado", "Aplicado", "Erro"] | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     x_admin_token: str | None = Header(default=None),
 ) -> list[CurationItem]:
@@ -206,6 +214,25 @@ def preview_apply_curation(
         raise HTTPException(status_code=500, detail="Erro ao gerar preview de aplicacao.") from error
 
     return CurationApplyPreviewResponse(**preview)
+
+
+@app.post("/admin/curation/{curation_id}/apply", response_model=CurationApplyResponse)
+def apply_curation(
+    curation_id: int,
+    payload: CurationApplyPreviewRequest,
+    x_admin_token: str | None = Header(default=None),
+) -> CurationApplyResponse:
+    require_admin_token(x_admin_token)
+
+    try:
+        result = apply_curation_to_database(curation_id, overrides=payload.overrides)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Erro ao aplicar curadoria.")
+        raise HTTPException(status_code=500, detail="Erro ao aplicar curadoria.") from error
+
+    return CurationApplyResponse(**result)
 
 
 @app.post("/admin/curation/{curation_id}/preview-apply", response_model=CurationApplyPreviewResponse)
