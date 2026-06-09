@@ -44,3 +44,7 @@ def is_openai_enabled() -> bool:
 def get_cors_origins() -> list[str]:
     origins = get_optional_env("CORS_ORIGINS", "http://localhost:5173")
     return [origin.strip() for origin in origins.split(",") if origin.strip()]
+
+
+def get_admin_token() -> str:
+    return get_env("ADMIN_TOKEN")

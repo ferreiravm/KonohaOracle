@@ -58,3 +58,51 @@ def run_select_query(query: str) -> list[dict]:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(query)
             return [dict(row) for row in cursor.fetchall()]
+
+
+def ensure_curation_table() -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS CuradoriaSugestoes (
+                    IdCuradoria SERIAL PRIMARY KEY,
+                    Entidade VARCHAR(50) NOT NULL,
+                    Consulta TEXT NOT NULL,
+                    Status VARCHAR(20) NOT NULL CHECK (Status IN ('Aprovado', 'Rejeitado')),
+                    Proposta JSONB NOT NULL,
+                    Fontes JSONB NOT NULL,
+                    Observacao TEXT,
+                    CriadoEm TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+        conn.commit()
+
+
+def save_curation_decision(
+    entity: str,
+    query: str,
+    status: str,
+    proposal_json: str,
+    sources_json: str,
+    note: str | None,
+) -> int:
+    ensure_curation_table()
+
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO CuradoriaSugestoes
+                    (Entidade, Consulta, Status, Proposta, Fontes, Observacao)
+                VALUES
+                    (%s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                RETURNING IdCuradoria;
+                """,
+                (entity, query, status, proposal_json, sources_json, note),
+            )
+            curation_id = cursor.fetchone()[0]
+        conn.commit()
+
+    return curation_id

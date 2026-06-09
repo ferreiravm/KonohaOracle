@@ -18,6 +18,9 @@ env/
 # Railway local project link
 .railway/
 
+# Local admin helper
+.admin_token.local
+
 # Frontend
 node_modules/
 dist/

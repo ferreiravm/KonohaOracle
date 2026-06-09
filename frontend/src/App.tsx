@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { LoaderCircle, Send } from "lucide-react";
+import { Check, LoaderCircle, Search, Send, X } from "lucide-react";
 
 type ChatMessage = {
   id: number;
@@ -13,15 +13,35 @@ type ChatResponse = {
   rows: Record<string, unknown>[];
 };
 
+type EntityType = "personagem" | "jutsu" | "arco" | "vila" | "cla" | "grupo" | "ferramenta";
+
+type CurationResult = {
+  entity: string;
+  query: string;
+  sources: Record<string, unknown>[];
+  proposal: Record<string, unknown>;
+};
+
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN ?? "";
 
 function App() {
+  const [activeView, setActiveView] = useState<"chat" | "admin">("chat");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [adminToken, setAdminToken] = useState(configuredAdminToken);
+  const [entity, setEntity] = useState<EntityType>("personagem");
+  const [curationQuery, setCurationQuery] = useState("");
+  const [curationNotes, setCurationNotes] = useState("");
+  const [curationResult, setCurationResult] = useState<CurationResult | null>(null);
+  const [curationStatus, setCurationStatus] = useState("");
+  const [isCurating, setIsCurating] = useState(false);
+
   const canSubmit = useMemo(() => question.trim().length >= 2 && !isLoading, [question, isLoading]);
+  const canCurate = useMemo(() => curationQuery.trim().length >= 2 && !isCurating, [curationQuery, isCurating]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,13 +51,7 @@ function App() {
       return;
     }
 
-    const userMessage: ChatMessage = {
-      id: Date.now(),
-      role: "user",
-      content: cleanQuestion,
-    };
-
-    setMessages((current) => [...current, userMessage]);
+    setMessages((current) => [...current, { id: Date.now(), role: "user", content: cleanQuestion }]);
     setQuestion("");
     setError("");
     setIsLoading(true);
@@ -72,62 +86,245 @@ function App() {
     }
   }
 
+  async function handleCuration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCurationStatus("");
+    setCurationResult(null);
+    setIsCurating(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/admin/curation/propose`, {
+        method: "POST",
+        headers: buildAdminHeaders(adminToken),
+        body: JSON.stringify({
+          entity,
+          query: curationQuery.trim(),
+          notes: curationNotes.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel gerar a proposta.");
+      }
+
+      setCurationResult((await response.json()) as CurationResult);
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    } finally {
+      setIsCurating(false);
+    }
+  }
+
+  async function handleDecision(status: "Aprovado" | "Rejeitado") {
+    if (!curationResult) {
+      return;
+    }
+
+    setCurationStatus("");
+    setIsCurating(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/admin/curation/decision`, {
+        method: "POST",
+        headers: buildAdminHeaders(adminToken),
+        body: JSON.stringify({
+          entity: curationResult.entity,
+          query: curationResult.query,
+          status,
+          proposal: curationResult.proposal,
+          sources: curationResult.sources,
+          note: curationNotes.trim() || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel salvar a decisao.");
+      }
+
+      const payload = (await response.json()) as { id: number; status: string };
+      setCurationStatus(`Curadoria ${payload.status.toLowerCase()} registrada com ID ${payload.id}.`);
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    } finally {
+      setIsCurating(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
         <img className="brand-logo" src="/naruto_logo.png" alt="Konoha Oracle" />
+        <nav className="nav-tabs" aria-label="Navegacao principal">
+          <button className={activeView === "chat" ? "active" : ""} onClick={() => setActiveView("chat")} type="button">
+            Chat
+          </button>
+          <button className={activeView === "admin" ? "active" : ""} onClick={() => setActiveView("admin")} type="button">
+            Admin
+          </button>
+        </nav>
         <div className="status-panel">
           <span className="status-dot" />
           <span>API: {apiUrl}</span>
         </div>
       </aside>
 
-      <section className="chat-area" aria-label="Chat Konoha Oracle">
-        <header className="chat-header">
-          <div>
-            <p className="eyebrow">Konoha Oracle</p>
-            <h1>Consulte o banco de dados de Naruto</h1>
+      {activeView === "chat" ? (
+        <section className="chat-area" aria-label="Chat Konoha Oracle">
+          <header className="chat-header">
+            <div>
+              <p className="eyebrow">Konoha Oracle</p>
+              <h1>Consulte o banco de dados de Naruto</h1>
+            </div>
+          </header>
+
+          <div className="messages" aria-live="polite">
+            {messages.length === 0 ? (
+              <div className="empty-state">
+                <h2>Digite uma pergunta para comecar</h2>
+                <p>Exemplos: quais personagens usam fogo? quais jutsus o Naruto conhece?</p>
+              </div>
+            ) : (
+              messages.map((message) => (
+                <article className={`message ${message.role}`} key={message.id}>
+                  <p>{message.content}</p>
+                </article>
+              ))
+            )}
+
+            {isLoading ? (
+              <div className="message oracle loading">
+                <LoaderCircle aria-hidden="true" className="spin" size={18} />
+                <span>Consultando...</span>
+              </div>
+            ) : null}
           </div>
-        </header>
 
-        <div className="messages" aria-live="polite">
-          {messages.length === 0 ? (
-            <div className="empty-state">
-              <h2>Digite uma pergunta para comecar</h2>
-              <p>Exemplos: quais personagens usam fogo? quais jutsus o Naruto conhece?</p>
+          {error ? <p className="error-message">{error}</p> : null}
+
+          <form className="composer" onSubmit={handleSubmit}>
+            <input
+              aria-label="Pergunta"
+              placeholder="Pergunte sobre personagens, jutsus, arcos ou vilas"
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+            />
+            <button aria-label="Enviar pergunta" disabled={!canSubmit} title="Enviar pergunta" type="submit">
+              <Send size={20} />
+            </button>
+          </form>
+        </section>
+      ) : (
+        <section className="admin-area" aria-label="Curadoria de dados">
+          <header className="chat-header">
+            <div>
+              <p className="eyebrow">Curadoria</p>
+              <h1>Pesquisar e revisar novas informacoes</h1>
             </div>
-          ) : (
-            messages.map((message) => (
-              <article className={`message ${message.role}`} key={message.id}>
-                <p>{message.content}</p>
-              </article>
-            ))
-          )}
+          </header>
 
-          {isLoading ? (
-            <div className="message oracle loading">
-              <LoaderCircle aria-hidden="true" className="spin" size={18} />
-              <span>Consultando...</span>
+          <div className="admin-grid">
+            <form className="admin-panel" onSubmit={handleCuration}>
+              <label>
+                Token admin
+                <input
+                  autoComplete="off"
+                  placeholder="X-Admin-Token"
+                  type="password"
+                  value={adminToken}
+                  onChange={(event) => setAdminToken(event.target.value)}
+                />
+              </label>
+
+              <label>
+                Tipo
+                <select value={entity} onChange={(event) => setEntity(event.target.value as EntityType)}>
+                  <option value="personagem">Personagem</option>
+                  <option value="jutsu">Jutsu</option>
+                  <option value="arco">Arco</option>
+                  <option value="vila">Vila</option>
+                  <option value="cla">Cla</option>
+                  <option value="grupo">Grupo</option>
+                  <option value="ferramenta">Ferramenta</option>
+                </select>
+              </label>
+
+              <label>
+                Busca publica
+                <input
+                  placeholder="Ex: Kisame Hoshigaki"
+                  value={curationQuery}
+                  onChange={(event) => setCurationQuery(event.target.value)}
+                />
+              </label>
+
+              <label>
+                Observacoes
+                <textarea
+                  placeholder="Opcional: foco da pesquisa, duvidas ou contexto adicional"
+                  rows={5}
+                  value={curationNotes}
+                  onChange={(event) => setCurationNotes(event.target.value)}
+                />
+              </label>
+
+              <button className="primary-action" disabled={!canCurate} type="submit">
+                {isCurating ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
+                <span>Analisar</span>
+              </button>
+
+              {curationStatus ? <p className="admin-status">{curationStatus}</p> : null}
+            </form>
+
+            <div className="review-panel">
+              {curationResult ? (
+                <>
+                  <div className="review-actions">
+                    <button className="approve" disabled={isCurating} onClick={() => handleDecision("Aprovado")} type="button">
+                      <Check size={18} />
+                      <span>Aprovar</span>
+                    </button>
+                    <button className="reject" disabled={isCurating} onClick={() => handleDecision("Rejeitado")} type="button">
+                      <X size={18} />
+                      <span>Rejeitar</span>
+                    </button>
+                  </div>
+
+                  <section className="proposal-section">
+                    <h2>Proposta estruturada</h2>
+                    <pre>{JSON.stringify(curationResult.proposal, null, 2)}</pre>
+                  </section>
+
+                  <section className="proposal-section">
+                    <h2>Fontes publicas</h2>
+                    <pre>{JSON.stringify(curationResult.sources, null, 2)}</pre>
+                  </section>
+                </>
+              ) : (
+                <div className="empty-state admin-empty">
+                  <h2>Nenhuma proposta gerada</h2>
+                  <p>Pesquise uma entidade para receber uma proposta estruturada antes de aprovar a curadoria.</p>
+                </div>
+              )}
             </div>
-          ) : null}
-        </div>
-
-        {error ? <p className="error-message">{error}</p> : null}
-
-        <form className="composer" onSubmit={handleSubmit}>
-          <input
-            aria-label="Pergunta"
-            placeholder="Pergunte sobre personagens, jutsus, arcos ou vilas"
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-          />
-          <button aria-label="Enviar pergunta" disabled={!canSubmit} title="Enviar pergunta" type="submit">
-            <Send size={20} />
-          </button>
-        </form>
-      </section>
+          </div>
+        </section>
+      )}
     </main>
   );
+}
+
+function buildAdminHeaders(adminToken: string) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (adminToken.trim()) {
+    headers["X-Admin-Token"] = adminToken.trim();
+  }
+
+  return headers;
 }
 
 export default App;
