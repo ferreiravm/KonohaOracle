@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Check, LoaderCircle, Search, Send, X } from "lucide-react";
+import { Check, LoaderCircle, RefreshCw, Search, Send, X } from "lucide-react";
 
 type ChatMessage = {
   id: number;
@@ -22,6 +22,17 @@ type CurationResult = {
   proposal: Record<string, unknown>;
 };
 
+type CurationItem = {
+  idcuradoria: number;
+  entidade: string;
+  consulta: string;
+  status: string;
+  proposta: Record<string, unknown>;
+  fontes: Record<string, unknown>[];
+  observacao?: string | null;
+  criadoem: string;
+};
+
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN ?? "";
 
@@ -37,6 +48,9 @@ function App() {
   const [curationQuery, setCurationQuery] = useState("");
   const [curationNotes, setCurationNotes] = useState("");
   const [curationResult, setCurationResult] = useState<CurationResult | null>(null);
+  const [curationItems, setCurationItems] = useState<CurationItem[]>([]);
+  const [selectedCuration, setSelectedCuration] = useState<CurationItem | null>(null);
+  const [curationFilter, setCurationFilter] = useState<"todos" | "Aprovado" | "Rejeitado">("todos");
   const [curationStatus, setCurationStatus] = useState("");
   const [isCurating, setIsCurating] = useState(false);
 
@@ -145,10 +159,35 @@ function App() {
 
       const payload = (await response.json()) as { id: number; status: string };
       setCurationStatus(`Curadoria ${payload.status.toLowerCase()} registrada com ID ${payload.id}.`);
+      await loadCurationItems();
     } catch (requestError) {
       setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
     } finally {
       setIsCurating(false);
+    }
+  }
+
+  async function loadCurationItems() {
+    setCurationStatus("");
+
+    try {
+      const params = new URLSearchParams({ limit: "30" });
+      if (curationFilter !== "todos") {
+        params.set("status", curationFilter);
+      }
+
+      const response = await fetch(`${apiUrl}/admin/curation/items?${params.toString()}`, {
+        headers: buildAdminHeaders(adminToken),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel carregar curadorias.");
+      }
+
+      setCurationItems((await response.json()) as CurationItem[]);
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
     }
   }
 
@@ -308,6 +347,52 @@ function App() {
                 </div>
               )}
             </div>
+
+            <section className="curation-list">
+              <div className="list-header">
+                <h2>Fila de curadoria</h2>
+                <div className="list-controls">
+                  <select value={curationFilter} onChange={(event) => setCurationFilter(event.target.value as typeof curationFilter)}>
+                    <option value="todos">Todos</option>
+                    <option value="Aprovado">Aprovados</option>
+                    <option value="Rejeitado">Rejeitados</option>
+                  </select>
+                  <button onClick={loadCurationItems} type="button">
+                    <RefreshCw size={16} />
+                    <span>Atualizar</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="curation-items">
+                {curationItems.length === 0 ? (
+                  <p className="muted-text">Nenhuma curadoria carregada.</p>
+                ) : (
+                  curationItems.map((item) => (
+                    <button
+                      className={`curation-row ${selectedCuration?.idcuradoria === item.idcuradoria ? "selected" : ""}`}
+                      key={item.idcuradoria}
+                      onClick={() => setSelectedCuration(item)}
+                      type="button"
+                    >
+                      <span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span>
+                      <strong>{item.consulta}</strong>
+                      <small>{item.entidade} #{item.idcuradoria}</small>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {selectedCuration ? (
+                <div className="curation-detail">
+                  <h3>{selectedCuration.consulta}</h3>
+                  <p>
+                    {selectedCuration.status} em {new Date(selectedCuration.criadoem).toLocaleString("pt-BR")}
+                  </p>
+                  <pre>{JSON.stringify(selectedCuration.proposta, null, 2)}</pre>
+                </div>
+              ) : null}
+            </section>
           </div>
         </section>
       )}

@@ -106,3 +106,50 @@ def save_curation_decision(
         conn.commit()
 
     return curation_id
+
+
+def list_curation_decisions(status: str | None = None, limit: int = 20) -> list[dict]:
+    ensure_curation_table()
+    safe_limit = max(1, min(limit, 100))
+
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            if status:
+                cursor.execute(
+                    """
+                    SELECT
+                        IdCuradoria,
+                        Entidade,
+                        Consulta,
+                        Status,
+                        Proposta,
+                        Fontes,
+                        Observacao,
+                        CriadoEm
+                    FROM CuradoriaSugestoes
+                    WHERE Status = %s
+                    ORDER BY IdCuradoria DESC
+                    LIMIT %s;
+                    """,
+                    (status, safe_limit),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        IdCuradoria,
+                        Entidade,
+                        Consulta,
+                        Status,
+                        Proposta,
+                        Fontes,
+                        Observacao,
+                        CriadoEm
+                    FROM CuradoriaSugestoes
+                    ORDER BY IdCuradoria DESC
+                    LIMIT %s;
+                    """,
+                    (safe_limit,),
+                )
+
+            return [dict(row) for row in cursor.fetchall()]

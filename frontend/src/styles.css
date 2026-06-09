@@ -376,6 +376,143 @@ h1 {
   padding: 24px;
 }
 
+.curation-list {
+  grid-column: 1 / -1;
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(24, 33, 44, 0.08);
+  overflow: hidden;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid #d9e2ec;
+}
+
+.list-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.list-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.list-controls select,
+.list-controls button {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.list-controls select {
+  border: 1px solid #cbd5e1;
+  padding: 0 10px;
+  background: #fff;
+}
+
+.list-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 0 12px;
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+}
+
+.curation-items {
+  display: grid;
+  gap: 1px;
+  background: #e5eaf0;
+}
+
+.curation-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) 130px;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 0;
+  background: #fff;
+  color: #1f2933;
+  text-align: left;
+  cursor: pointer;
+}
+
+.curation-row.selected {
+  background: #f0fdfa;
+}
+
+.curation-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.curation-row small {
+  color: #52616f;
+  text-align: right;
+}
+
+.status-badge {
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-badge.aprovado {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.rejeitado {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.curation-detail {
+  padding: 16px;
+  border-top: 1px solid #d9e2ec;
+}
+
+.curation-detail h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.curation-detail p,
+.muted-text {
+  color: #52616f;
+}
+
+.curation-detail pre {
+  max-height: 420px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #101828;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.muted-text {
+  margin: 0;
+  padding: 16px;
+  background: #fff;
+}
+
 .error-message {
   width: 100%;
   max-width: 980px;
@@ -427,6 +564,20 @@ h1 {
 
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .list-header,
+  .list-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .curation-row {
+    grid-template-columns: 1fr;
+  }
+
+  .curation-row small {
+    text-align: left;
   }
 
   h1 {

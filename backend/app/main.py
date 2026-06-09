@@ -1,12 +1,13 @@
 import logging
 from typing import Literal
 
-from fastapi import Header, HTTPException, FastAPI
+from fastapi import Header, HTTPException, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.app.config import get_admin_token, get_cors_origins
 from backend.app.curator import CurationService, EntityType, save_decision
+from backend.app.database import list_curation_decisions
 from backend.app.oracle import build_oracle_service
 
 
@@ -48,6 +49,17 @@ class CurationDecisionRequest(BaseModel):
 class CurationDecisionResponse(BaseModel):
     id: int
     status: str
+
+
+class CurationItem(BaseModel):
+    idcuradoria: int
+    entidade: str
+    consulta: str
+    status: str
+    proposta: dict
+    fontes: list[dict]
+    observacao: str | None = None
+    criadoem: str
 
 
 app = FastAPI(title="Konoha Oracle API")
@@ -130,3 +142,20 @@ def decide_curation(
         raise HTTPException(status_code=500, detail="Erro ao salvar decisao de curadoria.") from error
 
     return CurationDecisionResponse(id=curation_id, status=payload.status)
+
+
+@app.get("/admin/curation/items", response_model=list[CurationItem])
+def list_curation_items(
+    status: Literal["Aprovado", "Rejeitado"] | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    x_admin_token: str | None = Header(default=None),
+) -> list[CurationItem]:
+    require_admin_token(x_admin_token)
+
+    try:
+        rows = list_curation_decisions(status=status, limit=limit)
+    except Exception as error:
+        logger.exception("Erro ao listar curadorias.")
+        raise HTTPException(status_code=500, detail="Erro ao listar curadorias.") from error
+
+    return [CurationItem(**row) for row in rows]
