@@ -153,3 +153,58 @@ def list_curation_decisions(status: str | None = None, limit: int = 20) -> list[
                 )
 
             return [dict(row) for row in cursor.fetchall()]
+
+
+def get_curation_decision(curation_id: int) -> dict | None:
+    ensure_curation_table()
+
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    IdCuradoria,
+                    Entidade,
+                    Consulta,
+                    Status,
+                    Proposta,
+                    Fontes,
+                    Observacao,
+                    CriadoEm
+                FROM CuradoriaSugestoes
+                WHERE IdCuradoria = %s;
+                """,
+                (curation_id,),
+            )
+            row = cursor.fetchone()
+
+    return dict(row) if row else None
+
+
+def find_lookup_id(table: str, id_column: str, name_column: str, name: str) -> int | None:
+    allowed_tables = {
+        "clas": ("idcla", "nome"),
+        "vilas": ("idvila", "nome"),
+        "tipopersonagens": ("idtipopersonagem", "relevancia"),
+        "arcos": ("idarco", "nome"),
+        "ocupacoes": ("idocupacao", "nome"),
+    }
+
+    expected_columns = allowed_tables.get(table.lower())
+    if expected_columns != (id_column.lower(), name_column.lower()):
+        raise ValueError("Lookup nao permitido.")
+
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT {id_column}
+                FROM {table}
+                WHERE LOWER({name_column}) = LOWER(%s)
+                LIMIT 1;
+                """,
+                (name,),
+            )
+            row = cursor.fetchone()
+
+    return row[0] if row else None

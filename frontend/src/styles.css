@@ -485,6 +485,31 @@ h1 {
   border-top: 1px solid #d9e2ec;
 }
 
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+}
+
+.detail-header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .curation-detail h3 {
   margin: 0 0 6px;
   font-size: 18px;
@@ -505,6 +530,34 @@ h1 {
   color: #e5e7eb;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.apply-preview h4 {
+  margin: 14px 0 10px;
+  color: #1f2933;
+}
+
+.preview-block {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.preview-block.warning {
+  border-color: #fca5a5;
+  background: #fff1f2;
+}
+
+.preview-block strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.preview-block ul {
+  margin: 0;
+  padding-left: 20px;
 }
 
 .muted-text {
@@ -578,6 +631,10 @@ h1 {
 
   .curation-row small {
     text-align: left;
+  }
+
+  .detail-header {
+    flex-direction: column;
   }
 
   h1 {

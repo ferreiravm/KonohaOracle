@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.app.config import get_admin_token, get_cors_origins
+from backend.app.curation_apply import build_apply_preview
 from backend.app.curator import CurationService, EntityType, save_decision
 from backend.app.database import list_curation_decisions
 from backend.app.oracle import build_oracle_service
@@ -61,6 +62,18 @@ class CurationItem(BaseModel):
     fontes: list[dict]
     observacao: str | None = None
     criadoem: datetime
+
+
+class CurationApplyPreviewResponse(BaseModel):
+    curation_id: int
+    status: str
+    entity: str
+    query: str
+    operations: list[dict]
+    resolved_fields: dict
+    critical_missing: list[str]
+    warnings: list[str]
+    next_required_action: str
 
 
 app = FastAPI(title="Konoha Oracle API")
@@ -160,3 +173,21 @@ def list_curation_items(
         raise HTTPException(status_code=500, detail="Erro ao listar curadorias.") from error
 
     return [CurationItem(**row) for row in rows]
+
+
+@app.get("/admin/curation/{curation_id}/preview-apply", response_model=CurationApplyPreviewResponse)
+def preview_apply_curation(
+    curation_id: int,
+    x_admin_token: str | None = Header(default=None),
+) -> CurationApplyPreviewResponse:
+    require_admin_token(x_admin_token)
+
+    try:
+        preview = build_apply_preview(curation_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Erro ao gerar preview de aplicacao.")
+        raise HTTPException(status_code=500, detail="Erro ao gerar preview de aplicacao.") from error
+
+    return CurationApplyPreviewResponse(**preview)

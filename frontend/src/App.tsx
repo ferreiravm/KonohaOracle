@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Check, LoaderCircle, RefreshCw, Search, Send, X } from "lucide-react";
+import { Check, Database, LoaderCircle, RefreshCw, Search, Send, X } from "lucide-react";
 
 type ChatMessage = {
   id: number;
@@ -33,6 +33,18 @@ type CurationItem = {
   criadoem: string;
 };
 
+type ApplyPreview = {
+  curation_id: number;
+  status: string;
+  entity: string;
+  query: string;
+  operations: Record<string, unknown>[];
+  resolved_fields: Record<string, unknown>;
+  critical_missing: string[];
+  warnings: string[];
+  next_required_action: string;
+};
+
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN ?? "";
 
@@ -50,6 +62,7 @@ function App() {
   const [curationResult, setCurationResult] = useState<CurationResult | null>(null);
   const [curationItems, setCurationItems] = useState<CurationItem[]>([]);
   const [selectedCuration, setSelectedCuration] = useState<CurationItem | null>(null);
+  const [applyPreview, setApplyPreview] = useState<ApplyPreview | null>(null);
   const [curationFilter, setCurationFilter] = useState<"todos" | "Aprovado" | "Rejeitado">("todos");
   const [curationStatus, setCurationStatus] = useState("");
   const [isCurating, setIsCurating] = useState(false);
@@ -186,8 +199,35 @@ function App() {
       }
 
       setCurationItems((await response.json()) as CurationItem[]);
+      setApplyPreview(null);
     } catch (requestError) {
       setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    }
+  }
+
+  async function loadApplyPreview() {
+    if (!selectedCuration) {
+      return;
+    }
+
+    setCurationStatus("");
+    setIsCurating(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/admin/curation/${selectedCuration.idcuradoria}/preview-apply`, {
+        headers: buildAdminHeaders(adminToken),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel gerar o preview de aplicacao.");
+      }
+
+      setApplyPreview((await response.json()) as ApplyPreview);
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    } finally {
+      setIsCurating(false);
     }
   }
 
@@ -372,7 +412,10 @@ function App() {
                     <button
                       className={`curation-row ${selectedCuration?.idcuradoria === item.idcuradoria ? "selected" : ""}`}
                       key={item.idcuradoria}
-                      onClick={() => setSelectedCuration(item)}
+                      onClick={() => {
+                        setSelectedCuration(item);
+                        setApplyPreview(null);
+                      }}
                       type="button"
                     >
                       <span className={`status-badge ${item.status.toLowerCase()}`}>{item.status}</span>
@@ -385,11 +428,49 @@ function App() {
 
               {selectedCuration ? (
                 <div className="curation-detail">
-                  <h3>{selectedCuration.consulta}</h3>
-                  <p>
-                    {selectedCuration.status} em {new Date(selectedCuration.criadoem).toLocaleString("pt-BR")}
-                  </p>
-                  <pre>{JSON.stringify(selectedCuration.proposta, null, 2)}</pre>
+                  <div className="detail-header">
+                    <div>
+                      <h3>{selectedCuration.consulta}</h3>
+                      <p>
+                        {selectedCuration.status} em {new Date(selectedCuration.criadoem).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                    <button disabled={isCurating || selectedCuration.status !== "Aprovado"} onClick={loadApplyPreview} type="button">
+                      <Database size={16} />
+                      <span>Preview aplicar</span>
+                    </button>
+                  </div>
+
+                  {applyPreview ? (
+                    <div className="apply-preview">
+                      <h4>{applyPreview.next_required_action}</h4>
+                      {applyPreview.critical_missing.length > 0 ? (
+                        <div className="preview-block warning">
+                          <strong>Campos criticos pendentes</strong>
+                          <ul>
+                            {applyPreview.critical_missing.map((field) => (
+                              <li key={field}>{field}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {applyPreview.warnings.length > 0 ? (
+                        <div className="preview-block">
+                          <strong>Avisos</strong>
+                          <ul>
+                            {applyPreview.warnings.map((warning) => (
+                              <li key={warning}>{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      <pre>{JSON.stringify(applyPreview, null, 2)}</pre>
+                    </div>
+                  ) : (
+                    <pre>{JSON.stringify(selectedCuration.proposta, null, 2)}</pre>
+                  )}
                 </div>
               ) : null}
             </section>
