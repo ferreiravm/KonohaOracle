@@ -17,56 +17,149 @@ WIKI_HEADERS = {
 }
 
 
-def _wikipedia_search_url(query: str) -> str:
+def _mediawiki_search_url(base_url: str, query: str, limit: int = 3) -> str:
     params = urlencode(
         {
             "action": "opensearch",
             "search": query,
-            "limit": 3,
+            "limit": limit,
             "namespace": 0,
             "format": "json",
         }
     )
-    return f"https://pt.wikipedia.org/w/api.php?{params}"
+    return f"{base_url}/w/api.php?{params}"
+
+
+def _fandom_search_url(query: str, limit: int = 5) -> str:
+    params = urlencode(
+        {
+            "action": "query",
+            "list": "search",
+            "srsearch": query,
+            "srlimit": limit,
+            "format": "json",
+        }
+    )
+    return f"https://naruto.fandom.com/api.php?{params}"
+
+
+def _fandom_extract_url(title: str) -> str:
+    params = urlencode(
+        {
+            "action": "parse",
+            "page": title,
+            "prop": "text",
+            "format": "json",
+        }
+    )
+    return f"https://naruto.fandom.com/api.php?{params}"
 
 
 def search_public_context(query: str) -> list[dict]:
     with httpx.Client(timeout=12.0, follow_redirects=True, headers=WIKI_HEADERS) as client:
-        search_response = client.get(_wikipedia_search_url(query))
-        if search_response.status_code >= 400:
-            return [
-                {
-                    "title": "Busca publica indisponivel",
-                    "description": f"Wikipedia retornou HTTP {search_response.status_code}.",
-                    "url": "",
-                    "summary": "",
-                }
-            ]
-
-        payload = search_response.json()
-
-        titles = payload[1] if len(payload) > 1 else []
-        descriptions = payload[2] if len(payload) > 2 else []
-        urls = payload[3] if len(payload) > 3 else []
-
         results = []
-        for index, title in enumerate(titles[:3]):
-            summary_url = f"https://pt.wikipedia.org/api/rest_v1/page/summary/{quote(title, safe='')}"
-            summary_response = client.get(summary_url)
-            summary = ""
-            if summary_response.status_code == 200:
-                summary = summary_response.json().get("extract", "")
+        results.extend(search_wikipedia(client, "https://pt.wikipedia.org", "Wikipedia PT", query))
 
-            results.append(
-                {
-                    "title": title,
-                    "description": descriptions[index] if index < len(descriptions) else "",
-                    "url": urls[index] if index < len(urls) else "",
-                    "summary": summary,
-                }
-            )
+        if len(results) < 2:
+            results.extend(search_wikipedia(client, "https://en.wikipedia.org", "Wikipedia EN", query))
+
+        if len(results) < 2:
+            results.extend(search_fandom(client, query))
+
+    return dedupe_sources(results)[:6]
+
+
+def search_wikipedia(client: httpx.Client, base_url: str, source_name: str, query: str) -> list[dict]:
+    search_response = client.get(_mediawiki_search_url(base_url, query))
+    if search_response.status_code >= 400:
+        return []
+
+    payload = search_response.json()
+    titles = payload[1] if len(payload) > 1 else []
+    descriptions = payload[2] if len(payload) > 2 else []
+    urls = payload[3] if len(payload) > 3 else []
+
+    results = []
+    rest_base_url = base_url.replace("www.", "")
+    for index, title in enumerate(titles[:3]):
+        summary_url = f"{rest_base_url}/api/rest_v1/page/summary/{quote(title, safe='')}"
+        summary_response = client.get(summary_url)
+        summary = ""
+        if summary_response.status_code == 200:
+            summary = summary_response.json().get("extract", "")
+
+        results.append(
+            {
+                "source": source_name,
+                "title": title,
+                "description": descriptions[index] if index < len(descriptions) else "",
+                "url": urls[index] if index < len(urls) else "",
+                "summary": summary,
+            }
+        )
 
     return results
+
+
+def search_fandom(client: httpx.Client, query: str) -> list[dict]:
+    search_response = client.get(_fandom_search_url(query))
+    if search_response.status_code >= 400:
+        return []
+
+    search_results = search_response.json().get("query", {}).get("search", [])
+    results = []
+
+    for item in search_results[:5]:
+        title = item.get("title", "")
+        url = f"https://naruto.fandom.com/wiki/{quote(title.replace(' ', '_'), safe='/_:')}"
+        summary = get_fandom_extract(client, title)
+        if not summary:
+            summary = re.sub("<[^<]+?>", "", item.get("snippet", ""))
+        results.append(
+            {
+                "source": "Naruto Wiki/Fandom",
+                "title": title,
+                "description": "",
+                "url": url,
+                "summary": summary,
+            }
+        )
+
+    return results
+
+
+def get_fandom_extract(client: httpx.Client, title: str) -> str:
+    response = client.get(_fandom_extract_url(title))
+    if response.status_code >= 400:
+        return ""
+
+    html = response.json().get("parse", {}).get("text", {}).get("*", "")
+    text = html_to_text(html)
+    return text[:1500]
+
+
+def html_to_text(html: str) -> str:
+    text = re.sub(r"<table.*?</table>", " ", html, flags=re.DOTALL)
+    text = re.sub(r"<style.*?</style>", " ", text, flags=re.DOTALL)
+    text = re.sub(r"<script.*?</script>", " ", text, flags=re.DOTALL)
+    text = re.sub(r"<sup.*?</sup>", " ", text, flags=re.DOTALL)
+    text = re.sub(r"<[^<]+?>", " ", text)
+    text = re.sub(r"\[[^\]]+\]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def dedupe_sources(sources: list[dict]) -> list[dict]:
+    seen = set()
+    unique_sources = []
+
+    for source in sources:
+        key = (source.get("source", ""), source.get("title", ""), source.get("url", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_sources.append(source)
+
+    return unique_sources
 
 
 class CurationService:
