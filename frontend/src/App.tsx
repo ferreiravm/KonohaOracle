@@ -598,7 +598,7 @@ function App() {
                     </div>
                     <button disabled={isCurating || !canPreviewApply(selectedCuration)} onClick={loadApplyPreview} type="button">
                       <Database size={16} />
-                      <span>{selectedCuration.status === "Erro" ? "Corrigir aplicacao" : "Preview aplicar"}</span>
+                      <span>{normalizeText(selectedCuration.status) === "erro" ? "Corrigir aplicacao" : "Preview aplicar"}</span>
                     </button>
                   </div>
 
@@ -758,7 +758,16 @@ function buildAdminHeaders(adminToken: string) {
 }
 
 function canPreviewApply(curation: CurationItem) {
-  return curation.entidade === "personagem" && ["Aprovado", "Erro"].includes(curation.status);
+  const entity = normalizeText(curation.entidade);
+  const status = normalizeText(curation.status);
+
+  return entity === "personagem" && ["aprovado", "erro"].includes(status);
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 type PersonagemEditorProps = {
