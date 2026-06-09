@@ -65,6 +65,7 @@ const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN ?? "";
 
 function App() {
   const [activeView, setActiveView] = useState<"chat" | "admin">("chat");
+  const [adminSection, setAdminSection] = useState<"curation" | "characters">("curation");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,6 +84,10 @@ function App() {
   const [curationFilter, setCurationFilter] = useState<"todos" | "Aprovado" | "Rejeitado" | "Aplicado" | "Erro">("todos");
   const [curationStatus, setCurationStatus] = useState("");
   const [isCurating, setIsCurating] = useState(false);
+  const [characterSearch, setCharacterSearch] = useState("");
+  const [characterResults, setCharacterResults] = useState<Record<string, unknown>[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<Record<string, unknown> | null>(null);
+  const [characterForm, setCharacterForm] = useState<Record<string, string>>({});
 
   const canSubmit = useMemo(() => question.trim().length >= 2 && !isLoading, [question, isLoading]);
   const canCurate = useMemo(() => curationQuery.trim().length >= 2 && !isCurating, [curationQuery, isCurating]);
@@ -297,6 +302,82 @@ function App() {
     setReferenceOptions((await response.json()) as ReferenceOptions);
   }
 
+  async function searchCharacters(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    setCurationStatus("");
+
+    try {
+      const params = new URLSearchParams({ q: characterSearch, limit: "30" });
+      const response = await fetch(`${apiUrl}/admin/personagens?${params.toString()}`, {
+        headers: buildAdminHeaders(adminToken),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel buscar personagens.");
+      }
+
+      setCharacterResults((await response.json()) as Record<string, unknown>[]);
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    }
+  }
+
+  async function loadCharacter(personagemId: number) {
+    setCurationStatus("");
+
+    try {
+      await loadReferenceOptions();
+      const response = await fetch(`${apiUrl}/admin/personagens/${personagemId}`, {
+        headers: buildAdminHeaders(adminToken),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel carregar personagem.");
+      }
+
+      const payload = (await response.json()) as Record<string, unknown>;
+      setSelectedCharacter(payload);
+      setCharacterForm(recordToStringForm(payload));
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    }
+  }
+
+  async function saveCharacter() {
+    if (!selectedCharacter) {
+      return;
+    }
+
+    setCurationStatus("");
+    setIsCurating(true);
+
+    try {
+      const personagemId = Number(selectedCharacter.idpersonagem);
+      const response = await fetch(`${apiUrl}/admin/personagens/${personagemId}`, {
+        method: "PUT",
+        headers: buildAdminHeaders(adminToken),
+        body: JSON.stringify({ data: normalizeOverrides(characterForm) }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Nao foi possivel salvar personagem.");
+      }
+
+      const payload = (await response.json()) as Record<string, unknown>;
+      setSelectedCharacter(payload);
+      setCharacterForm(recordToStringForm(payload));
+      setCurationStatus("Personagem atualizado.");
+      await searchCharacters();
+    } catch (requestError) {
+      setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
+    } finally {
+      setIsCurating(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -369,6 +450,16 @@ function App() {
             </div>
           </header>
 
+          <div className="admin-subnav">
+            <button className={adminSection === "curation" ? "active" : ""} onClick={() => setAdminSection("curation")} type="button">
+              Curadoria
+            </button>
+            <button className={adminSection === "characters" ? "active" : ""} onClick={() => setAdminSection("characters")} type="button">
+              Personagens
+            </button>
+          </div>
+
+          {adminSection === "curation" ? (
           <div className="admin-grid">
             <form className="admin-panel" onSubmit={handleCuration}>
               <label>
@@ -569,6 +660,77 @@ function App() {
               ) : null}
             </section>
           </div>
+          ) : (
+            <section className="admin-grid characters-admin">
+              <form className="admin-panel" onSubmit={searchCharacters}>
+                <label>
+                  Token admin
+                  <input
+                    autoComplete="off"
+                    placeholder="X-Admin-Token"
+                    type="password"
+                    value={adminToken}
+                    onChange={(event) => setAdminToken(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Buscar personagem
+                  <input
+                    placeholder="Ex: Naruto"
+                    value={characterSearch}
+                    onChange={(event) => setCharacterSearch(event.target.value)}
+                  />
+                </label>
+                <button className="primary-action" type="submit">
+                  <Search size={18} />
+                  <span>Buscar</span>
+                </button>
+                {curationStatus ? <p className="admin-status">{curationStatus}</p> : null}
+              </form>
+
+              <div className="review-panel character-results">
+                {characterResults.length === 0 ? (
+                  <div className="empty-state admin-empty">
+                    <h2>Nenhum personagem carregado</h2>
+                    <p>Busque por nome ou sobrenome para editar um registro existente.</p>
+                  </div>
+                ) : (
+                  characterResults.map((character) => (
+                    <button
+                      className={`curation-row ${selectedCharacter?.idpersonagem === character.idpersonagem ? "selected" : ""}`}
+                      key={String(character.idpersonagem)}
+                      onClick={() => loadCharacter(Number(character.idpersonagem))}
+                      type="button"
+                    >
+                      <span className="status-badge aprovado">{String(character.estado ?? "")}</span>
+                      <strong>{`${character.nome ?? ""} ${character.sobrenome ?? ""}`}</strong>
+                      <small>#{String(character.idpersonagem)}</small>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {selectedCharacter ? (
+                <section className="curation-list character-editor-panel">
+                  <div className="list-header">
+                    <h2>{`${selectedCharacter.nome ?? ""} ${selectedCharacter.sobrenome ?? ""}`}</h2>
+                    <button className="save-character" disabled={isCurating} onClick={saveCharacter} type="button">
+                      <Check size={16} />
+                      <span>Salvar alteracoes</span>
+                    </button>
+                  </div>
+                  <div className="completion-form">
+                    <PersonagemEditor
+                      applyOverrides={characterForm}
+                      preview={buildEditorPreview(characterForm)}
+                      referenceOptions={referenceOptions}
+                      setApplyOverrides={setCharacterForm}
+                    />
+                  </div>
+                </section>
+              ) : null}
+            </section>
+          )}
         </section>
       )}
     </main>
@@ -691,6 +853,26 @@ function normalizeOverrides(overrides: Record<string, string>) {
         return [key, Number.isNaN(numericValue) ? value : numericValue];
       }),
   );
+}
+
+function recordToStringForm(record: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key.toLowerCase(), value === null || value === undefined ? "" : String(value)]),
+  );
+}
+
+function buildEditorPreview(form: Record<string, string>): ApplyPreview {
+  return {
+    curation_id: 0,
+    status: "ready",
+    entity: "personagem",
+    query: "",
+    operations: [],
+    resolved_fields: form,
+    critical_missing: [],
+    warnings: [],
+    next_required_action: "",
+  };
 }
 
 export default App;

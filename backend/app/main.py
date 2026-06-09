@@ -9,7 +9,13 @@ from pydantic import BaseModel, Field
 from backend.app.config import get_admin_token, get_cors_origins
 from backend.app.curation_apply import apply_curation_to_database, build_apply_preview
 from backend.app.curator import CurationService, EntityType, save_decision
-from backend.app.database import list_curation_decisions, load_reference_options
+from backend.app.database import (
+    get_personagem,
+    list_curation_decisions,
+    load_reference_options,
+    search_personagens,
+    update_personagem,
+)
 from backend.app.oracle import build_oracle_service
 
 
@@ -86,6 +92,10 @@ class CurationApplyResponse(BaseModel):
     status: str
     idpersonagem: int
     operation: dict
+
+
+class PersonagemUpdateRequest(BaseModel):
+    data: dict
 
 
 app = FastAPI(title="Konoha Oracle API")
@@ -196,6 +206,52 @@ def reference_options(x_admin_token: str | None = Header(default=None)) -> dict:
     except Exception as error:
         logger.exception("Erro ao carregar opcoes de referencia.")
         raise HTTPException(status_code=500, detail="Erro ao carregar opcoes de referencia.") from error
+
+
+@app.get("/admin/personagens")
+def search_personagens_endpoint(
+    q: str = Query(default="", max_length=100),
+    limit: int = Query(default=20, ge=1, le=50),
+    x_admin_token: str | None = Header(default=None),
+) -> list[dict]:
+    require_admin_token(x_admin_token)
+
+    try:
+        return search_personagens(q, limit=limit)
+    except Exception as error:
+        logger.exception("Erro ao buscar personagens.")
+        raise HTTPException(status_code=500, detail="Erro ao buscar personagens.") from error
+
+
+@app.get("/admin/personagens/{personagem_id}")
+def get_personagem_endpoint(
+    personagem_id: int,
+    x_admin_token: str | None = Header(default=None),
+) -> dict:
+    require_admin_token(x_admin_token)
+
+    personagem = get_personagem(personagem_id)
+    if not personagem:
+        raise HTTPException(status_code=404, detail="Personagem nao encontrado.")
+
+    return personagem
+
+
+@app.put("/admin/personagens/{personagem_id}")
+def update_personagem_endpoint(
+    personagem_id: int,
+    payload: PersonagemUpdateRequest,
+    x_admin_token: str | None = Header(default=None),
+) -> dict:
+    require_admin_token(x_admin_token)
+
+    try:
+        return update_personagem(personagem_id, payload.data)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Erro ao atualizar personagem.")
+        raise HTTPException(status_code=500, detail="Erro ao atualizar personagem.") from error
 
 
 @app.get("/admin/curation/{curation_id}/preview-apply", response_model=CurationApplyPreviewResponse)

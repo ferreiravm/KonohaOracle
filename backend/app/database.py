@@ -346,3 +346,107 @@ def load_reference_options() -> dict[str, list[dict]]:
     ]
 
     return options
+
+
+PERSONAGEM_EDIT_FIELDS = {
+    "idtipopersonagem",
+    "idcla",
+    "idarcoaparicao",
+    "idarcomorte",
+    "idocupacaoclassico",
+    "idocupacaoshippuden",
+    "idvila",
+    "nome",
+    "sobrenome",
+    "idadeclasico",
+    "idadeshippuden",
+    "sexo",
+    "datanascimento",
+    "alturaclassico",
+    "alturashippuden",
+    "corcabelo",
+    "corolhos",
+    "corpele",
+    "descricaoroupaclassico",
+    "descricaoroupashippuden",
+    "missoescompletas",
+    "descricao",
+    "historiapersonagem",
+    "estado",
+}
+
+
+def search_personagens(term: str, limit: int = 20) -> list[dict]:
+    safe_limit = max(1, min(limit, 50))
+    pattern = f"%{term}%"
+
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    IdPersonagem,
+                    Nome,
+                    Sobrenome,
+                    Estado,
+                    Descricao
+                FROM Personagens
+                WHERE Nome ILIKE %s
+                OR Sobrenome ILIKE %s
+                OR CONCAT(Nome, ' ', COALESCE(Sobrenome, '')) ILIKE %s
+                ORDER BY Nome, Sobrenome
+                LIMIT %s;
+                """,
+                (pattern, pattern, pattern, safe_limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+
+def get_personagem(personagem_id: int) -> dict | None:
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT *
+                FROM Personagens
+                WHERE IdPersonagem = %s;
+                """,
+                (personagem_id,),
+            )
+            row = cursor.fetchone()
+
+    return dict(row) if row else None
+
+
+def update_personagem(personagem_id: int, data: dict) -> dict:
+    clean_data = {
+        key.lower(): value
+        for key, value in data.items()
+        if key.lower() in PERSONAGEM_EDIT_FIELDS
+    }
+
+    if not clean_data:
+        raise ValueError("Nenhum campo valido para atualizar.")
+
+    set_clause = ", ".join([f"{field} = %s" for field in clean_data])
+    values = list(clean_data.values())
+    values.append(personagem_id)
+
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                f"""
+                UPDATE Personagens
+                SET {set_clause}
+                WHERE IdPersonagem = %s
+                RETURNING *;
+                """,
+                values,
+            )
+            row = cursor.fetchone()
+        conn.commit()
+
+    if not row:
+        raise ValueError("Personagem nao encontrado.")
+
+    return dict(row)

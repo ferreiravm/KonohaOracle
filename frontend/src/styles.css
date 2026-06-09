@@ -102,6 +102,29 @@ textarea {
   padding: 28px;
 }
 
+.admin-subnav {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto 18px;
+  display: flex;
+  gap: 8px;
+}
+
+.admin-subnav button {
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #fff;
+  color: #334e68;
+  cursor: pointer;
+}
+
+.admin-subnav button.active {
+  background: #18212c;
+  color: #fff;
+}
+
 .chat-header {
   display: flex;
   align-items: flex-end;
@@ -408,6 +431,39 @@ h1 {
 .list-controls button {
   min-height: 38px;
   border-radius: 8px;
+}
+
+.save-character {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+}
+
+.save-character:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.characters-admin .review-panel {
+  min-height: 360px;
+}
+
+.character-results {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  background: #e5eaf0;
+}
+
+.character-editor-panel {
+  grid-column: 1 / -1;
 }
 
 .list-controls select {
