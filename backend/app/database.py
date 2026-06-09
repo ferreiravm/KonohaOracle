@@ -218,8 +218,9 @@ def get_curation_decision(curation_id: int) -> dict | None:
 
 
 def insert_personagem(data: dict) -> int:
-    columns = list(data.keys())
-    values = [data[column] for column in columns]
+    clean_data, _ = sanitize_personagem_text_lengths(data)
+    columns = list(clean_data.keys())
+    values = [clean_data[column] for column in columns]
     placeholders = ", ".join(["%s"] * len(columns))
     column_list = ", ".join(columns)
 
@@ -376,6 +377,33 @@ PERSONAGEM_EDIT_FIELDS = {
 }
 
 
+PERSONAGEM_TEXT_LIMITS = {
+    "nome": 100,
+    "sobrenome": 100,
+    "sexo": 10,
+    "corcabelo": 50,
+    "corolhos": 50,
+    "corpele": 50,
+    "descricaoroupaclassico": 200,
+    "descricaoroupashippuden": 200,
+    "descricao": 250,
+    "estado": 10,
+}
+
+
+def sanitize_personagem_text_lengths(data: dict) -> tuple[dict, list[str]]:
+    clean_data = dict(data)
+    warnings = []
+
+    for field, max_length in PERSONAGEM_TEXT_LIMITS.items():
+        value = clean_data.get(field)
+        if isinstance(value, str) and len(value) > max_length:
+            clean_data[field] = value[:max_length]
+            warnings.append(f"Campo {field} foi limitado a {max_length} caracteres.")
+
+    return clean_data, warnings
+
+
 def search_personagens(term: str, limit: int = 20) -> list[dict]:
     safe_limit = max(1, min(limit, 50))
     pattern = f"%{term}%"
@@ -424,6 +452,7 @@ def update_personagem(personagem_id: int, data: dict) -> dict:
         for key, value in data.items()
         if key.lower() in PERSONAGEM_EDIT_FIELDS
     }
+    clean_data, _ = sanitize_personagem_text_lengths(clean_data)
 
     if not clean_data:
         raise ValueError("Nenhum campo valido para atualizar.")

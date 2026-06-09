@@ -5,6 +5,7 @@ from backend.app.database import (
     mark_curation_applied,
     mark_curation_error,
     personagem_exists,
+    sanitize_personagem_text_lengths,
 )
 
 
@@ -48,8 +49,8 @@ def build_apply_preview(curation_id: int, overrides: dict | None = None) -> dict
     curation = get_curation_decision(curation_id)
     if not curation:
         raise ValueError("Curadoria nao encontrada.")
-    if curation["status"] != "Aprovado":
-        raise ValueError("Apenas curadorias aprovadas podem ser aplicadas.")
+    if curation["status"] not in {"Aprovado", "Erro"}:
+        raise ValueError("Apenas curadorias aprovadas ou com erro podem ser aplicadas.")
     if curation["entidade"] != "personagem":
         raise ValueError("Preview de aplicacao disponivel apenas para personagem.")
 
@@ -58,6 +59,8 @@ def build_apply_preview(curation_id: int, overrides: dict | None = None) -> dict
     normalized = normalize_personagem(personagem)
     resolved_fields, warnings = resolve_personagem_fields(normalized)
     apply_overrides(resolved_fields, overrides or {})
+    resolved_fields, length_warnings = sanitize_personagem_text_lengths(resolved_fields)
+    warnings.extend(length_warnings)
     critical_missing = [field for field in REQUIRED_PERSONAGEM_FIELDS if not resolved_fields.get(field)]
 
     operations = []
@@ -157,7 +160,13 @@ def normalize_personagem(personagem: dict) -> dict:
 
     estado = normalized.get("estado")
     if isinstance(estado, str):
-        normalized["estado"] = "Vivo" if estado.lower() == "vivo" else "Morto" if estado.lower() == "morto" else estado
+        estado_normalizado = estado.strip().lower()
+        if estado_normalizado in {"vivo", "viva", "alive"}:
+            normalized["estado"] = "Vivo"
+        elif estado_normalizado in {"morto", "morta", "falecido", "falecida", "dead"}:
+            normalized["estado"] = "Morto"
+        else:
+            normalized["estado"] = estado
 
     return normalized
 
