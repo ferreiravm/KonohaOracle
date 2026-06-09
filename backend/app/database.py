@@ -208,3 +208,32 @@ def find_lookup_id(table: str, id_column: str, name_column: str, name: str) -> i
             row = cursor.fetchone()
 
     return row[0] if row else None
+
+
+def load_reference_options() -> dict[str, list[dict]]:
+    queries = {
+        "tipos_personagem": "SELECT IdTipoPersonagem AS id, Relevancia AS label FROM TipoPersonagens ORDER BY IdTipoPersonagem;",
+        "arcos": "SELECT IdArco AS id, Nome AS label FROM Arcos ORDER BY IdArco;",
+        "ocupacoes": "SELECT IdOcupacao AS id, Nome AS label FROM Ocupacoes ORDER BY IdOcupacao;",
+        "vilas": "SELECT IdVila AS id, Nome AS label FROM Vilas ORDER BY IdVila;",
+        "clas": "SELECT IdCla AS id, Nome AS label FROM Clas ORDER BY IdCla;",
+    }
+
+    options: dict[str, list[dict]] = {}
+
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            for key, query in queries.items():
+                cursor.execute(query)
+                options[key] = [dict(row) for row in cursor.fetchall()]
+
+    options["estados"] = [
+        {"id": "Vivo", "label": "Vivo"},
+        {"id": "Morto", "label": "Morto"},
+    ]
+    options["sexos"] = [
+        {"id": "Masculino", "label": "Masculino"},
+        {"id": "Feminino", "label": "Feminino"},
+    ]
+
+    return options

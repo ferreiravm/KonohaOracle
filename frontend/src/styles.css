@@ -560,6 +560,49 @@ h1 {
   padding-left: 20px;
 }
 
+.completion-form {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  background: #f0fdfa;
+}
+
+.completion-form h4 {
+  margin: 0;
+}
+
+.completion-form label {
+  display: grid;
+  gap: 7px;
+  color: #334e68;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.completion-form select {
+  min-height: 40px;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+}
+
+.completion-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+}
+
 .muted-text {
   margin: 0;
   padding: 16px;

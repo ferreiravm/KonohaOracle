@@ -37,7 +37,7 @@ REQUIRED_PERSONAGEM_FIELDS = [
 ]
 
 
-def build_apply_preview(curation_id: int) -> dict:
+def build_apply_preview(curation_id: int, overrides: dict | None = None) -> dict:
     curation = get_curation_decision(curation_id)
     if not curation:
         raise ValueError("Curadoria nao encontrada.")
@@ -50,6 +50,7 @@ def build_apply_preview(curation_id: int) -> dict:
     personagem = proposal.get("suggested_records", {}).get("personagem") or {}
     normalized = normalize_personagem(personagem)
     resolved_fields, warnings = resolve_personagem_fields(normalized)
+    apply_overrides(resolved_fields, overrides or {})
     critical_missing = [field for field in REQUIRED_PERSONAGEM_FIELDS if not resolved_fields.get(field)]
 
     operations = []
@@ -82,6 +83,25 @@ def build_apply_preview(curation_id: int) -> dict:
             else "Preview pronto para a futura etapa de aplicacao."
         ),
     }
+
+
+def apply_overrides(resolved_fields: dict, overrides: dict) -> None:
+    allowed_overrides = {
+        "idtipopersonagem",
+        "idarcoaparicao",
+        "estado",
+        "sexo",
+        "idcla",
+        "idvila",
+        "idocupacaoclassico",
+        "idocupacaoshippuden",
+        "idarcomorte",
+    }
+
+    for key, value in overrides.items():
+        normalized_key = str(key).lower()
+        if normalized_key in allowed_overrides and value not in ("", None):
+            resolved_fields[normalized_key] = value
 
 
 def normalize_personagem(personagem: dict) -> dict:

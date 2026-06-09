@@ -45,6 +45,21 @@ type ApplyPreview = {
   next_required_action: string;
 };
 
+type ReferenceOption = {
+  id: number | string;
+  label: string;
+};
+
+type ReferenceOptions = {
+  tipos_personagem: ReferenceOption[];
+  arcos: ReferenceOption[];
+  estados: ReferenceOption[];
+  sexos: ReferenceOption[];
+  clas: ReferenceOption[];
+  vilas: ReferenceOption[];
+  ocupacoes: ReferenceOption[];
+};
+
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN ?? "";
 
@@ -63,6 +78,8 @@ function App() {
   const [curationItems, setCurationItems] = useState<CurationItem[]>([]);
   const [selectedCuration, setSelectedCuration] = useState<CurationItem | null>(null);
   const [applyPreview, setApplyPreview] = useState<ApplyPreview | null>(null);
+  const [referenceOptions, setReferenceOptions] = useState<ReferenceOptions | null>(null);
+  const [applyOverrides, setApplyOverrides] = useState<Record<string, string>>({});
   const [curationFilter, setCurationFilter] = useState<"todos" | "Aprovado" | "Rejeitado">("todos");
   const [curationStatus, setCurationStatus] = useState("");
   const [isCurating, setIsCurating] = useState(false);
@@ -215,7 +232,9 @@ function App() {
 
     try {
       const response = await fetch(`${apiUrl}/admin/curation/${selectedCuration.idcuradoria}/preview-apply`, {
+        method: "POST",
         headers: buildAdminHeaders(adminToken),
+        body: JSON.stringify({ overrides: normalizeOverrides(applyOverrides) }),
       });
 
       if (!response.ok) {
@@ -224,11 +243,28 @@ function App() {
       }
 
       setApplyPreview((await response.json()) as ApplyPreview);
+      await loadReferenceOptions();
     } catch (requestError) {
       setCurationStatus(requestError instanceof Error ? requestError.message : "Erro inesperado.");
     } finally {
       setIsCurating(false);
     }
+  }
+
+  async function loadReferenceOptions() {
+    if (referenceOptions) {
+      return;
+    }
+
+    const response = await fetch(`${apiUrl}/admin/reference-options`, {
+      headers: buildAdminHeaders(adminToken),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    setReferenceOptions((await response.json()) as ReferenceOptions);
   }
 
   return (
@@ -415,6 +451,7 @@ function App() {
                       onClick={() => {
                         setSelectedCuration(item);
                         setApplyPreview(null);
+                        setApplyOverrides({});
                       }}
                       type="button"
                     >
@@ -455,6 +492,67 @@ function App() {
                         </div>
                       ) : null}
 
+                      {applyPreview.critical_missing.length > 0 ? (
+                        <div className="completion-form">
+                          <h4>Completar campos</h4>
+                          {applyPreview.critical_missing.includes("idtipopersonagem") ? (
+                            <label>
+                              Tipo de personagem
+                              <select
+                                value={applyOverrides.idtipopersonagem ?? ""}
+                                onChange={(event) => setApplyOverrides((current) => ({ ...current, idtipopersonagem: event.target.value }))}
+                              >
+                                <option value="">Selecione</option>
+                                {referenceOptions?.tipos_personagem.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+
+                          {applyPreview.critical_missing.includes("idarcoaparicao") ? (
+                            <label>
+                              Arco de aparicao
+                              <select
+                                value={applyOverrides.idarcoaparicao ?? ""}
+                                onChange={(event) => setApplyOverrides((current) => ({ ...current, idarcoaparicao: event.target.value }))}
+                              >
+                                <option value="">Selecione</option>
+                                {referenceOptions?.arcos.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+
+                          {applyPreview.critical_missing.includes("estado") ? (
+                            <label>
+                              Estado
+                              <select
+                                value={applyOverrides.estado ?? ""}
+                                onChange={(event) => setApplyOverrides((current) => ({ ...current, estado: event.target.value }))}
+                              >
+                                <option value="">Selecione</option>
+                                {referenceOptions?.estados.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+
+                          <button disabled={isCurating} onClick={loadApplyPreview} type="button">
+                            <Database size={16} />
+                            <span>Atualizar preview</span>
+                          </button>
+                        </div>
+                      ) : null}
+
                       {applyPreview.warnings.length > 0 ? (
                         <div className="preview-block">
                           <strong>Avisos</strong>
@@ -491,6 +589,17 @@ function buildAdminHeaders(adminToken: string) {
   }
 
   return headers;
+}
+
+function normalizeOverrides(overrides: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(overrides)
+      .filter(([, value]) => value !== "")
+      .map(([key, value]) => {
+        const numericValue = Number(value);
+        return [key, Number.isNaN(numericValue) ? value : numericValue];
+      }),
+  );
 }
 
 export default App;

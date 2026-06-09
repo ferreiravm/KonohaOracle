@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from backend.app.config import get_admin_token, get_cors_origins
 from backend.app.curation_apply import build_apply_preview
 from backend.app.curator import CurationService, EntityType, save_decision
-from backend.app.database import list_curation_decisions
+from backend.app.database import list_curation_decisions, load_reference_options
 from backend.app.oracle import build_oracle_service
 
 
@@ -74,6 +74,10 @@ class CurationApplyPreviewResponse(BaseModel):
     critical_missing: list[str]
     warnings: list[str]
     next_required_action: str
+
+
+class CurationApplyPreviewRequest(BaseModel):
+    overrides: dict = Field(default_factory=dict)
 
 
 app = FastAPI(title="Konoha Oracle API")
@@ -175,6 +179,17 @@ def list_curation_items(
     return [CurationItem(**row) for row in rows]
 
 
+@app.get("/admin/reference-options")
+def reference_options(x_admin_token: str | None = Header(default=None)) -> dict:
+    require_admin_token(x_admin_token)
+
+    try:
+        return load_reference_options()
+    except Exception as error:
+        logger.exception("Erro ao carregar opcoes de referencia.")
+        raise HTTPException(status_code=500, detail="Erro ao carregar opcoes de referencia.") from error
+
+
 @app.get("/admin/curation/{curation_id}/preview-apply", response_model=CurationApplyPreviewResponse)
 def preview_apply_curation(
     curation_id: int,
@@ -184,6 +199,25 @@ def preview_apply_curation(
 
     try:
         preview = build_apply_preview(curation_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Erro ao gerar preview de aplicacao.")
+        raise HTTPException(status_code=500, detail="Erro ao gerar preview de aplicacao.") from error
+
+    return CurationApplyPreviewResponse(**preview)
+
+
+@app.post("/admin/curation/{curation_id}/preview-apply", response_model=CurationApplyPreviewResponse)
+def preview_apply_curation_with_overrides(
+    curation_id: int,
+    payload: CurationApplyPreviewRequest,
+    x_admin_token: str | None = Header(default=None),
+) -> CurationApplyPreviewResponse:
+    require_admin_token(x_admin_token)
+
+    try:
+        preview = build_apply_preview(curation_id, overrides=payload.overrides)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
