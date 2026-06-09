@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Literal
 
 from fastapi import Header, HTTPException, FastAPI, Query
@@ -59,7 +60,7 @@ class CurationItem(BaseModel):
     proposta: dict
     fontes: list[dict]
     observacao: str | None = None
-    criadoem: str
+    criadoem: datetime
 
 
 app = FastAPI(title="Konoha Oracle API")
